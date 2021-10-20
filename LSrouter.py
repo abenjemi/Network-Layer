@@ -33,13 +33,31 @@ class LSrouter(Router):
                         # VALUE = a list of lists of all its neighbor routers/clients and the cost to each neighbor
                         # {router: [[neighbor_router_or_client, cost]]}
         self.graph[self.addr] = []
+        # each router adds its neighbors and cost to neighbors to graph
+        for link in self.links.values():
+            neighbor = [link.get_e2(self.addr), link.get_cost()]
+            self.graph[self.addr].append(neighbor)
+
+        self.table = {}
         """add your own class fields and initialization code here"""
 
 
     def handlePacket(self, port, packet):
         """process incoming packet"""
-        # default implementation sends packet back out the port it arrived
-        # you should replace it with your implementation
+        
+        # if packet received is a data packet
+        if packet.isData():
+            if self.table.has_key(packet.dstAddr):
+                out_port = self.table[packet.dstAddr]['out_port']
+                self.send(out_port, packet)
+            else:
+                return
+
+
+        # if packet received is control packet (LSA)
+        elif packet.isControl():
+            return
+
         self.send(port, packet)
 
 
@@ -64,6 +82,7 @@ class LSrouter(Router):
     def handlePeriodicOps(self):
         """handle periodic operations. This method is called every heartbeatTime.
         You can change the value of heartbeatTime in the json file"""
+
         pass
 
 
