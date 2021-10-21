@@ -33,10 +33,9 @@ class LSrouter(Router):
                         # VALUE = a list of lists of all its neighbor routers/clients and the cost to each neighbor
                         # {router: [[neighbor_router_or_client, cost]]}
         self.graph[self.addr] = []
-        # each router adds its neighbors and cost to neighbors to graph
-        for link in self.links.values():
-            neighbor = [link.get_e2(self.addr), link.get_cost()]
-            self.graph[self.addr].append(neighbor)
+        
+        self.control = Packet(2, self.addr, 'a', content='[]')
+        lst = loads(self.control.content)
 
         self.table = {}
         """add your own class fields and initialization code here"""
@@ -44,11 +43,17 @@ class LSrouter(Router):
 
     def handlePacket(self, port, packet):
         """process incoming packet"""
+
+
+
+
+
+
         
         # if packet received is a data packet
         if packet.isData():
-            if self.table.has_key(packet.dstAddr):
-                out_port = self.table[packet.dstAddr]['out_port']
+            if packet.dstAddr in self.table.keys():
+                out_port = self.table[packet.dstAddr][2]
                 self.send(out_port, packet)
             else:
                 return
@@ -56,10 +61,33 @@ class LSrouter(Router):
 
         # if packet received is control packet (LSA)
         elif packet.isControl():
-            return
 
-        self.send(port, packet)
+            # each router adds its neighbors and cost to neighbors to graph
 
+            LSA = []
+            for link in self.links.values():
+                #print(self.addr, '    ', link.e1, ' ', link.e2, ' ', link.cost)
+                neighbor = [link.get_e2(self.addr), link.get_cost()]
+                # print(self.addr, ' ' , neighbor)
+                LSA.append(neighbor)
+
+            self.graph[self.addr] = LSA
+
+            # update control packet
+            content = dumps(LSA)
+            self.control.content = content
+
+
+            #old_graph = self.graph
+            LSA = loads(packet.content)
+            self.graph[packet.srcAddr] = LSA
+            self.sendtoNeighbors(port=port)
+            # if old_graph != self.graph:
+            finishedQ = self.dijkstra()
+            for i in range(len(finishedQ)):
+                out_port = self.getPort(finishedQ[i].next_hop)
+                lst = [finishedQ[i].cost,finishedQ[i].next_hop,out_port]
+                self.table[finishedQ[i].addr] = lst
 
     def handleNewLink(self, port, endpoint, cost):
         """a new link has been added to switch port and initialized, or an existing
@@ -83,7 +111,22 @@ class LSrouter(Router):
         """handle periodic operations. This method is called every heartbeatTime.
         You can change the value of heartbeatTime in the json file"""
 
-        pass
+        # if self.control.content == '[]':
+        
+        # print("control packet of ", self.addr,"content = ", content)
+        self.sendtoNeighbors()
+
+    def sendtoNeighbors(self, port=None):
+        for p in self.links.keys():
+            if p != port:
+                e2 = self.links[p].get_e2(self.addr)
+                self.control.dstAddr = e2
+                self.send(p, self.control)
+                
+    def getPort(self, e2):
+        for p in self.links.keys():
+            if self.links[p].get_e2(self.addr) == e2:
+                return p
 
 
     def dijkstra(self):

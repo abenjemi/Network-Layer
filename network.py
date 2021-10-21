@@ -73,6 +73,7 @@ class Network:
         links = {}
         for addr1, addr2, p1, p2, c in linkParams:
             link = Link(addr1, addr2, c, self.latencyMultiplier)
+            # print(link.e1, ' ', link.e2, ' ', link.cost)
             links[(addr1,addr2)] = (p1, p2, c, link)
         return links
 

@@ -68,6 +68,7 @@ class Router():
                 pass
             for port in self.links.keys():
                 packet = self.links[port].recv(self.addr)
+                
                 if packet:
                     self.logRecvdPacket(port, packet)
                     self.handlePacket(port, packet)
