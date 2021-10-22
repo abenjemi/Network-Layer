@@ -29,17 +29,27 @@ class LSrouter(Router):
 
     def __init__(self, addr, heartbeatTime):
         Router.__init__(self, addr, heartbeatTime)  # initialize superclass - don't remove
+
+        # Initially G is empty
         self.graph = {} # A dictionary with KEY = router
                         # VALUE = a list of lists of all its neighbor routers/clients and the cost to each neighbor
                         # {router: [[neighbor_router_or_client, cost]]}
         self.graph[self.addr] = []
 
-        self.LSA = []
-        
-        self.control = Packet(2, self.addr, 'a', content='[]')
-        #lst = loads(self.control.content)
+        # router creates a control packet (LSA)
+        self.LSA = {}    
+        self.LSA['neighbors'] = []  
+        self.LSA['seq_num'] = 0 
+        self.control = Packet(2, self.addr, 'a', content='{}')
 
+        # routing table
         self.table = {}
+
+        # vector of the highest sequence number
+        self.seq_vec = {}
+
+
+
         """add your own class fields and initialization code here"""
 
 
@@ -54,63 +64,49 @@ class LSrouter(Router):
             else:
                 return
 
-
         # if packet received is control packet (LSA)
         elif packet.isControl():
-
-            #old_graph = self.graph
             LSA = loads(packet.content)
-            self.graph[packet.srcAddr] = LSA
-            self.sendtoNeighbors(packet, port)
-            # if old_graph != self.graph:
-            finishedQ = self.dijkstra()
-            for i in range(len(finishedQ)):
-                out_port = self.getPort(finishedQ[i].next_hop)
-                lst = [finishedQ[i].cost,finishedQ[i].next_hop,out_port]
-                self.table[finishedQ[i].addr] = lst
+            if (packet.srcAddr not in self.seq_vec.keys() or self.seq_vec[packet.srcAddr] < LSA['seq_num']):
+                if packet.srcAddr == '6':
+                    print(self.addr, LSA)
+                self.seq_vec[packet.srcAddr] = LSA['seq_num']
+                self.graph[packet.srcAddr] = LSA['neighbors']
+                self.sendtoNeighbors(packet, port)
+                # if old_graph != self.graph:
+                finishedQ = self.dijkstra()
+                for i in range(len(finishedQ)):
+                    #if finishedQ[i]
+                    out_port = self.getPort(finishedQ[i].next_hop)
+                    lst = [finishedQ[i].cost,finishedQ[i].next_hop,out_port]
+                    self.table[finishedQ[i].addr] = lst
 
-            if(self.addr == '1'):
-                print(self.table)
+            # if(self.addr == '1'):
+            #     print(self.graph)
 
     def handleNewLink(self, port, endpoint, cost):
         """a new link has been added to switch port and initialized, or an existing
         link cost has been updated. Implement any routing/forwarding action that
         you might want to take under such a scenario"""
 
-        # neighbor = [endpoint, cost]
-
-        # if [link,cost] not in LSA, add them
-        if [endpoint, cost] not in self.LSA:
-            self.LSA = [[a,b] for [a,b] in self.LSA if a != endpoint]
-            self.LSA.append([endpoint, cost])
-            print(self.addr, self.LSA)
+        # if [neighbor,cost] not in LSA, add them
+        if [endpoint, cost] not in self.LSA['neighbors']:
+            
+            self.LSA['neighbors'] = [[a,b] for [a,b] in self.LSA['neighbors'] if a != endpoint]
+            self.LSA['neighbors'].append([endpoint, cost])
             content = dumps(self.LSA)
             self.control.content = content
+            
+            # when LSA changes, router updates it sends it to all neighbors
             self.sendtoNeighbors(self.control)
+            self.LSA['seq_num'] += 1
 
-
+        # router adds all its neigbors and cost to neighbors to G
         for neighbor in self.graph[self.addr]:
             if neighbor[0] == endpoint:
                 self.graph[self.addr].remove(neighbor)
         self.graph[self.addr].append([endpoint,cost])
-        print(self.addr, self.graph)
-
-        # each router adds its neighbors and cost to neighbors to graph
-
-        # LSA = []
-        # for link in self.links.values():
-        #     #print(self.addr, '    ', link.e1, ' ', link.e2, ' ', link.cost)
-        #     neighbor = [link.get_e2(self.addr), link.get_cost()]
-        #     # print(self.addr, ' ' , neighbor)
-        #     LSA.append(neighbor)
-
-        # self.graph[self.addr] = LSA
-
-        # # update control packet
-        # content = dumps(LSA)
-        # self.control.content = content
-        # # print(self.control.content)
-
+ 
 
     def handleRemoveLink(self, port, endpoint):
         """an existing link has been removed from the switch port. Implement any 
@@ -124,13 +120,7 @@ class LSrouter(Router):
         """handle periodic operations. This method is called every heartbeatTime.
         You can change the value of heartbeatTime in the json file"""
 
-        # for link in self.links.values():
-        #     print(self.addr, '    ', link.e1, ' ', link.e2, ' ', link.cost)
-
-        # if self.control.content == '[]':
-        
-        # print("control packet of ", self.addr,"content = ", content)
-        
+        # send LSA to all neighbors periodically        
         self.sendtoNeighbors(self.control)
 
     def sendtoNeighbors(self, packet, port=None):
@@ -148,8 +138,7 @@ class LSrouter(Router):
 
     def dijkstra(self):
         """An implementation of Dijkstra's shortest path algorithm.
-        Operates on self.graph datastructure and returns the cost and next hop to
-        each destination router in the graph as a List (finishedQ) of type PQEntry"""
+        Operates on self.graph datastructure and returns the cost and next hop to each destination router in the graph as a List (finishedQ) of type PQEntry"""
         priorityQ = []
         finishedQ = [PQEntry(self.addr, 0, self.addr)]
         for neighbor in self.graph[self.addr]:
