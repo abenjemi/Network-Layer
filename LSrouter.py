@@ -33,9 +33,11 @@ class LSrouter(Router):
                         # VALUE = a list of lists of all its neighbor routers/clients and the cost to each neighbor
                         # {router: [[neighbor_router_or_client, cost]]}
         self.graph[self.addr] = []
+
+        self.LSA = []
         
         self.control = Packet(2, self.addr, 'a', content='[]')
-        lst = loads(self.control.content)
+        #lst = loads(self.control.content)
 
         self.table = {}
         """add your own class fields and initialization code here"""
@@ -44,12 +46,6 @@ class LSrouter(Router):
     def handlePacket(self, port, packet):
         """process incoming packet"""
 
-
-
-
-
-
-        
         # if packet received is a data packet
         if packet.isData():
             if packet.dstAddr in self.table.keys():
@@ -62,26 +58,10 @@ class LSrouter(Router):
         # if packet received is control packet (LSA)
         elif packet.isControl():
 
-            # each router adds its neighbors and cost to neighbors to graph
-
-            LSA = []
-            for link in self.links.values():
-                #print(self.addr, '    ', link.e1, ' ', link.e2, ' ', link.cost)
-                neighbor = [link.get_e2(self.addr), link.get_cost()]
-                # print(self.addr, ' ' , neighbor)
-                LSA.append(neighbor)
-
-            self.graph[self.addr] = LSA
-
-            # update control packet
-            content = dumps(LSA)
-            self.control.content = content
-
-
             #old_graph = self.graph
             LSA = loads(packet.content)
             self.graph[packet.srcAddr] = LSA
-            self.sendtoNeighbors(port=port)
+            self.sendtoNeighbors(packet, port)
             # if old_graph != self.graph:
             finishedQ = self.dijkstra()
             for i in range(len(finishedQ)):
@@ -89,14 +69,47 @@ class LSrouter(Router):
                 lst = [finishedQ[i].cost,finishedQ[i].next_hop,out_port]
                 self.table[finishedQ[i].addr] = lst
 
+            if(self.addr == '1'):
+                print(self.table)
+
     def handleNewLink(self, port, endpoint, cost):
         """a new link has been added to switch port and initialized, or an existing
         link cost has been updated. Implement any routing/forwarding action that
         you might want to take under such a scenario"""
+
+        # neighbor = [endpoint, cost]
+
+        # if [link,cost] not in LSA, add them
+        if [endpoint, cost] not in self.LSA:
+            self.LSA = [[a,b] for [a,b] in self.LSA if a != endpoint]
+            self.LSA.append([endpoint, cost])
+            print(self.addr, self.LSA)
+            content = dumps(self.LSA)
+            self.control.content = content
+            self.sendtoNeighbors(self.control)
+
+
         for neighbor in self.graph[self.addr]:
             if neighbor[0] == endpoint:
                 self.graph[self.addr].remove(neighbor)
         self.graph[self.addr].append([endpoint,cost])
+        print(self.addr, self.graph)
+
+        # each router adds its neighbors and cost to neighbors to graph
+
+        # LSA = []
+        # for link in self.links.values():
+        #     #print(self.addr, '    ', link.e1, ' ', link.e2, ' ', link.cost)
+        #     neighbor = [link.get_e2(self.addr), link.get_cost()]
+        #     # print(self.addr, ' ' , neighbor)
+        #     LSA.append(neighbor)
+
+        # self.graph[self.addr] = LSA
+
+        # # update control packet
+        # content = dumps(LSA)
+        # self.control.content = content
+        # # print(self.control.content)
 
 
     def handleRemoveLink(self, port, endpoint):
@@ -111,17 +124,21 @@ class LSrouter(Router):
         """handle periodic operations. This method is called every heartbeatTime.
         You can change the value of heartbeatTime in the json file"""
 
+        # for link in self.links.values():
+        #     print(self.addr, '    ', link.e1, ' ', link.e2, ' ', link.cost)
+
         # if self.control.content == '[]':
         
         # print("control packet of ", self.addr,"content = ", content)
-        self.sendtoNeighbors()
+        
+        self.sendtoNeighbors(self.control)
 
-    def sendtoNeighbors(self, port=None):
+    def sendtoNeighbors(self, packet, port=None):
         for p in self.links.keys():
             if p != port:
                 e2 = self.links[p].get_e2(self.addr)
                 self.control.dstAddr = e2
-                self.send(p, self.control)
+                self.send(p, packet)
                 
     def getPort(self, e2):
         for p in self.links.keys():
