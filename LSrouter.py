@@ -81,7 +81,7 @@ class LSrouter(Router):
                     lst = [finishedQ[i].cost,finishedQ[i].next_hop,out_port]
                     self.table[finishedQ[i].addr] = lst
 
-            # if(self.addr == '1'):
+            # if(self.addr == '2'):
             #     print(self.graph)
 
     def handleNewLink(self, port, endpoint, cost):
@@ -89,31 +89,38 @@ class LSrouter(Router):
         link cost has been updated. Implement any routing/forwarding action that
         you might want to take under such a scenario"""
 
-        # if [neighbor,cost] not in LSA, add them
-        if [endpoint, cost] not in self.LSA['neighbors']:
-            
-            self.LSA['neighbors'] = [[a,b] for [a,b] in self.LSA['neighbors'] if a != endpoint]
-            self.LSA['neighbors'].append([endpoint, cost])
-            content = dumps(self.LSA)
-            self.control.content = content
-            
-            # when LSA changes, router updates it sends it to all neighbors
-            self.sendtoNeighbors(self.control)
-            self.LSA['seq_num'] += 1
-
         # router adds all its neigbors and cost to neighbors to G
         for neighbor in self.graph[self.addr]:
             if neighbor[0] == endpoint:
                 self.graph[self.addr].remove(neighbor)
         self.graph[self.addr].append([endpoint,cost])
+
+        # if [neighbor,cost] not in LSA, add them
+        if [endpoint, cost] not in self.LSA['neighbors']:
+            self.LSA['neighbors'] = [[a,b] for [a,b] in self.LSA['neighbors'] if a != endpoint]
+            self.LSA['neighbors'].append([endpoint, cost])
+            self.LSA['seq_num'] += 1
+            content = dumps(self.LSA)
+            self.control.content = content
+            # when LSA changes, router updates it sends it to all neighbors
+            self.sendtoNeighbors(self.control)
  
 
     def handleRemoveLink(self, port, endpoint):
         """an existing link has been removed from the switch port. Implement any 
         routing/forwarding action that you might want to take under such a scenario"""
+
         for neighbor in self.graph[self.addr]:
             if neighbor[0] == endpoint:
                 self.graph[self.addr].remove(neighbor)
+
+        # update LSA by removing the endpoint from neighbors list
+        print("AAAAAAAAAAAAAAAAAAAAAAA")
+        self.LSA['neighbors'] = [[a,b] for [a,b] in self.LSA['neighbors'] if a != endpoint]
+        self.LSA['seq_num'] += 1
+        content = dumps(self.LSA)
+        self.control.content = content
+        self.sendtoNeighbors(self.control)
 
 
     def handlePeriodicOps(self):
