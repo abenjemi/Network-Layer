@@ -68,21 +68,14 @@ class LSrouter(Router):
         elif packet.isControl():
             LSA = loads(packet.content)
             if (packet.srcAddr not in self.seq_vec.keys() or self.seq_vec[packet.srcAddr] < LSA['seq_num']):
-                if packet.srcAddr == '6':
-                    print(self.addr, LSA)
                 self.seq_vec[packet.srcAddr] = LSA['seq_num']
                 self.graph[packet.srcAddr] = LSA['neighbors']
                 self.sendtoNeighbors(packet, port)
-                # if old_graph != self.graph:
                 finishedQ = self.dijkstra()
                 for i in range(len(finishedQ)):
-                    #if finishedQ[i]
                     out_port = self.getPort(finishedQ[i].next_hop)
                     lst = [finishedQ[i].cost,finishedQ[i].next_hop,out_port]
                     self.table[finishedQ[i].addr] = lst
-
-            # if(self.addr == '2'):
-            #     print(self.graph)
 
     def handleNewLink(self, port, endpoint, cost):
         """a new link has been added to switch port and initialized, or an existing
@@ -115,7 +108,6 @@ class LSrouter(Router):
                 self.graph[self.addr].remove(neighbor)
 
         # update LSA by removing the endpoint from neighbors list
-        print("AAAAAAAAAAAAAAAAAAAAAAA")
         self.LSA['neighbors'] = [[a,b] for [a,b] in self.LSA['neighbors'] if a != endpoint]
         self.LSA['seq_num'] += 1
         content = dumps(self.LSA)
@@ -127,14 +119,15 @@ class LSrouter(Router):
         """handle periodic operations. This method is called every heartbeatTime.
         You can change the value of heartbeatTime in the json file"""
 
-        # send LSA to all neighbors periodically        
+        # send LSA to all neighbors periodically
+        self.control.content = dumps(self.LSA)        
         self.sendtoNeighbors(self.control)
 
     def sendtoNeighbors(self, packet, port=None):
         for p in self.links.keys():
             if p != port:
                 e2 = self.links[p].get_e2(self.addr)
-                self.control.dstAddr = e2
+                packet.dstAddr = e2
                 self.send(p, packet)
                 
     def getPort(self, e2):
