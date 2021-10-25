@@ -63,9 +63,9 @@ class DVrouter(Router):
                                 self.table[d] = [cost_neighbor_d + cost_to_neighbor,packet.srcAddr,port]
                                 change += 1
                 
-                # max infinity counter
-                if self.table[d][0] > self.infinity:
-                    self.table[d] = [self.infinity,'',0]
+                    # max infinity counter
+                    if self.table[d][0] >= self.infinity:
+                        self.table[d] = [self.infinity,'',0]
 
             # if table updated - send it to neighbors
             if change > 0:

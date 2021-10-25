@@ -61,21 +61,17 @@ class LSrouter(Router):
             if packet.dstAddr in self.table.keys():
                 out_port = self.table[packet.dstAddr][2]
                 self.send(out_port, packet)
-            else:
-                return
 
         # if packet received is control packet (LSA)
         elif packet.isControl():
             LSA = loads(packet.content)
             if (packet.srcAddr not in self.seq_vec.keys() or self.seq_vec[packet.srcAddr] < LSA['seq_num']):
+                old_graph = self.graph
                 self.seq_vec[packet.srcAddr] = LSA['seq_num']
                 self.graph[packet.srcAddr] = LSA['neighbors']
                 self.sendtoNeighbors(packet, port)
-                finishedQ = self.dijkstra()
-                for i in range(len(finishedQ)):
-                    out_port = self.getPort(finishedQ[i].next_hop)
-                    lst = [finishedQ[i].cost,finishedQ[i].next_hop,out_port]
-                    self.table[finishedQ[i].addr] = lst
+                self.run_dijkstra()
+                
 
     def handleNewLink(self, port, endpoint, cost):
         """a new link has been added to switch port and initialized, or an existing
@@ -87,16 +83,18 @@ class LSrouter(Router):
             if neighbor[0] == endpoint:
                 self.graph[self.addr].remove(neighbor)
         self.graph[self.addr].append([endpoint,cost])
+        #self.run_dijkstra()
 
-        # if [neighbor,cost] not in LSA, add them
-        if [endpoint, cost] not in self.LSA['neighbors']:
-            self.LSA['neighbors'] = [[a,b] for [a,b] in self.LSA['neighbors'] if a != endpoint]
-            self.LSA['neighbors'].append([endpoint, cost])
-            self.LSA['seq_num'] += 1
-            content = dumps(self.LSA)
-            self.control.content = content
-            # when LSA changes, router updates it sends it to all neighbors
-            self.sendtoNeighbors(self.control)
+
+        # if [neighbor,cost] not in LSA, add it
+        # if [endpoint, cost] not in self.LSA['neighbors']:
+        self.LSA['neighbors'] = [[a,b] for [a,b] in self.LSA['neighbors'] if a != endpoint]
+        self.LSA['neighbors'].append([endpoint, cost])
+        content = dumps(self.LSA)
+        self.control.content = content
+        # when LSA changes, router updates control packet and sends it to all neighbors
+        self.sendtoNeighbors(self.control)
+        self.LSA['seq_num'] += 1
  
 
     def handleRemoveLink(self, port, endpoint):
@@ -106,13 +104,15 @@ class LSrouter(Router):
         for neighbor in self.graph[self.addr]:
             if neighbor[0] == endpoint:
                 self.graph[self.addr].remove(neighbor)
+        # self.run_dijkstra()
 
         # update LSA by removing the endpoint from neighbors list
         self.LSA['neighbors'] = [[a,b] for [a,b] in self.LSA['neighbors'] if a != endpoint]
-        self.LSA['seq_num'] += 1
+        # self.LSA['seq_num'] += 1
         content = dumps(self.LSA)
         self.control.content = content
         self.sendtoNeighbors(self.control)
+        self.LSA['seq_num'] += 1
 
 
     def handlePeriodicOps(self):
@@ -122,6 +122,16 @@ class LSrouter(Router):
         # send LSA to all neighbors periodically
         self.control.content = dumps(self.LSA)        
         self.sendtoNeighbors(self.control)
+
+    def run_dijkstra(self):
+        finishedQ = self.dijkstra()
+        
+        for i in range(len(finishedQ)):
+            out_port = self.getPort(finishedQ[i].next_hop)
+            if self.addr == '1':
+                print(finishedQ[i].addr, finishedQ[i].next_hop, out_port)
+            lst = [finishedQ[i].cost,finishedQ[i].next_hop,out_port]
+            self.table[finishedQ[i].addr] = lst
 
     def sendtoNeighbors(self, packet, port=None):
         for p in self.links.keys():
